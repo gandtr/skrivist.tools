@@ -13,7 +13,7 @@ import urllib.error
 from functools import partial
 
 from calibre.gui2.actions import InterfaceAction
-from calibre.gui2 import error_dialog, info_dialog, question_dialog
+from calibre.gui2 import Dispatcher, error_dialog, info_dialog, question_dialog
 from calibre.gui2.threaded_jobs import ThreadedJob
 from calibre.utils.config import JSONConfig
 
@@ -191,16 +191,6 @@ class SkrivistAction(InterfaceAction):
             ):
                 return
 
-        # Only one upload job at a time
-        if getattr(self, '_upload_running', False):
-            error_dialog(
-                self.gui,
-                'Upload In Progress',
-                'A Skrivist upload job is already running.',
-                show=True
-            )
-            return
-
         # Resolve file paths and metadata on the UI thread (needs db access),
         # then hand the payloads to a background job for the network work
         db = self.gui.current_db.new_api
@@ -217,9 +207,10 @@ class SkrivistAction(InterfaceAction):
             self._show_upload_result(0, prep_failures)
             return
 
-        self._prep_failures = prep_failures
-        self._upload_running = True
-
+        # ThreadedJob calls the callback on its worker thread, so wrap it in
+        # Dispatcher to get back onto the GUI thread. Concurrent launches are
+        # serialized by the job type's max_concurrent_count of 1, so prep
+        # failures are bound into the callback rather than stored on self.
         server_url = prefs['server_url'].rstrip('/')
         job = ThreadedJob(
             'skrivist_upload',
@@ -227,7 +218,7 @@ class SkrivistAction(InterfaceAction):
             upload_books,
             (payloads, api_key, server_url),
             {},
-            self._upload_done
+            Dispatcher(partial(self._upload_done, prep_failures))
         )
         self.gui.job_manager.run_threaded_job(job)
 
@@ -260,12 +251,8 @@ class SkrivistAction(InterfaceAction):
 
         return file_path, metadata
 
-    def _upload_done(self, job):
-        """Job completion callback — calibre dispatches this on the GUI thread"""
-        self._upload_running = False
-        prep_failures = getattr(self, '_prep_failures', [])
-        self._prep_failures = []
-
+    def _upload_done(self, prep_failures, job):
+        """Job completion callback — runs on the GUI thread via Dispatcher"""
         if job.failed:
             self.gui.job_exception(job, dialog_title='Skrivist Upload Failed')
             return
