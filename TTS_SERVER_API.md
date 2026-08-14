@@ -438,10 +438,12 @@ async def handle_tts(req):
     return web.Response(body=audio, content_type="audio/mpeg")
 
 async def handle_ws(req):
-    if API_KEY and req.rel_url.query.get("token") != API_KEY:
-        raise web.HTTPUnauthorized()
     ws = web.WebSocketResponse()
     await ws.prepare(req)
+    if API_KEY and req.rel_url.query.get("token") != API_KEY:
+        # Per spec: reject by closing with code 1008 and reason "Unauthorized"
+        await ws.close(code=1008, message=b"Unauthorized")
+        return ws
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
             data = json.loads(msg.data)
