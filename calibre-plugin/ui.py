@@ -26,8 +26,8 @@ from calibre_plugins.skrivist.upload import (
     upload_books,
 )
 
-GITHUB_RELEASES_URL = 'https://api.github.com/repos/c0ze/skrivist.tools/releases/latest'
-RELEASES_PAGE = 'https://github.com/c0ze/skrivist.tools/releases/latest'
+GITHUB_RELEASES_URL = 'https://api.github.com/repos/gandtr/skrivist.tools/releases/latest'
+RELEASES_PAGE = 'https://github.com/gandtr/skrivist.tools/releases/latest'
 
 # Plugin configuration stored in calibre config directory
 prefs = JSONConfig('plugins/skrivist')

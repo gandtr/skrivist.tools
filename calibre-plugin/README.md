@@ -6,7 +6,7 @@ Send books from Calibre directly to your [Skriv.ist](https://skriv.ist) cloud li
 
 ### Step 1 — Download the plugin
 
-Go to the [Releases page](https://github.com/c0ze/skrivist.tools/releases/latest) and download `skrivist-calibre-plugin-vX.X.X.zip`.
+Go to the [Releases page](https://github.com/gandtr/skrivist.tools/releases/latest) and download `skrivist-calibre-plugin-vX.X.X.zip`.
 
 > Do **not** unzip it — Calibre installs directly from the zip file.
 
