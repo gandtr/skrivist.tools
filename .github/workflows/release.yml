@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Get version from tag
         id: version
@@ -24,11 +24,13 @@ jobs:
             -x "*.md" \
             -x "*.pyc" \
             -x "__pycache__/*" \
+            -x "tests/*" \
+            -x "tests/*/*" \
             -x ".DS_Store" \
             -x "images/.gitkeep"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: skrivist-calibre-plugin-${{ steps.version.outputs.VERSION }}.zip
           generate_release_notes: true

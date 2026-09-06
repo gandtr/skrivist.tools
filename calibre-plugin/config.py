@@ -37,7 +37,8 @@ class ConfigWidget(QWidget):
         # Instructions
         instructions = QLabel(
             'Enter your Skrivist API key to enable uploads.\n'
-            'You can generate an API key from your Skriv.ist account settings.'
+            'You can generate an API key from your account settings at '
+            'app.skriv.ist (Settings → Calibre integration).'
         )
         instructions.setWordWrap(True)
         api_layout.addWidget(instructions)
