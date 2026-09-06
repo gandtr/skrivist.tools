@@ -22,9 +22,9 @@ Go to the [Releases page](https://github.com/c0ze/skrivist.tools/releases/latest
 
 ### Step 3 — Generate an API key
 
-1. Go to [skriv.ist](https://skriv.ist) and sign in
-2. Open **Settings** (gear icon, top right)
-3. Go to the **API Keys** tab
+1. Sign in at [https://app.skriv.ist](https://app.skriv.ist)
+2. Open **Settings** (gear icon)
+3. Expand the **Calibre integration** section
 4. Click **Generate API Key**
 5. Copy the key (it starts with `sk_...`) — you won't see it again
 
@@ -55,6 +55,7 @@ The toolbar button **Send to Skrivist** will now appear. You can also add it man
 
 - Calibre 5.0 or newer
 - Books must be in EPUB format
+- EPUB files must be 50 MB or smaller (the server upload limit)
 - A [Skriv.ist](https://skriv.ist) account
 - An API key (generated in Skriv.ist settings)
 

@@ -8,18 +8,23 @@ import os
 import html
 import json
 import re
-import uuid
 import threading
 import urllib.request
-import urllib.error
 from functools import partial
 
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2 import error_dialog, info_dialog, question_dialog
 from calibre.gui2.threaded_jobs import ThreadedJob
 from calibre.utils.config import JSONConfig
+from calibre.utils.localization import lang_as_iso639_1
 
 from qt.core import QMenu, QTimer, QToolButton
+
+from calibre_plugins.skrivist.upload import (
+    check_size,
+    normalize_language,
+    upload_books,
+)
 
 GITHUB_RELEASES_URL = 'https://api.github.com/repos/c0ze/skrivist.tools/releases/latest'
 RELEASES_PAGE = 'https://github.com/c0ze/skrivist.tools/releases/latest'
@@ -28,87 +33,6 @@ RELEASES_PAGE = 'https://github.com/c0ze/skrivist.tools/releases/latest'
 prefs = JSONConfig('plugins/skrivist')
 prefs.defaults['api_key'] = ''
 prefs.defaults['server_url'] = 'https://api.skriv.ist'
-
-
-def upload_book(file_path, metadata, api_key, server_url):
-    """Upload a single book file to Skrivist, streaming it from disk"""
-    upload_url = f'{server_url}/v1/upload'
-
-    # Build multipart request with random boundary
-    boundary = f'----SkrivistBoundary{uuid.uuid4().hex}'
-
-    pre = []
-
-    # Add metadata fields
-    for key, value in metadata.items():
-        pre.append(f'--{boundary}'.encode())
-        pre.append(f'Content-Disposition: form-data; name="{key}"'.encode())
-        pre.append(b'')
-        pre.append(value.encode('utf-8'))
-
-    # File part header — the file bytes themselves are streamed below
-    pre.append(f'--{boundary}'.encode())
-    pre.append(f'Content-Disposition: form-data; name="file"; filename="{os.path.basename(file_path)}"'.encode())
-    pre.append(b'Content-Type: application/epub+zip')
-    pre.append(b'')
-    pre_bytes = b'\r\n'.join(pre) + b'\r\n'
-    post_bytes = f'\r\n--{boundary}--'.encode()
-
-    content_length = len(pre_bytes) + os.path.getsize(file_path) + len(post_bytes)
-
-    def body():
-        yield pre_bytes
-        with open(file_path, 'rb') as f:
-            while True:
-                chunk = f.read(65536)
-                if not chunk:
-                    break
-                yield chunk
-        yield post_bytes
-
-    # Create request. Content-Length must be set explicitly so urllib
-    # accepts an iterable body without chunked transfer encoding.
-    req = urllib.request.Request(upload_url, data=body())
-    req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-    req.add_header('Content-Length', str(content_length))
-    req.add_header('X-API-Key', api_key)
-
-    # Send request
-    try:
-        with urllib.request.urlopen(req, timeout=300) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            if not result.get('success'):
-                raise ValueError(result.get('error', 'Upload failed'))
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8', errors='replace')
-        raise ValueError(f'Server error {e.code}: {error_body}')
-
-
-def upload_books(payloads, api_key, server_url, abort=None, log=None, notifications=None):
-    """
-    Upload prepared (file_path, metadata) payloads to Skrivist.
-    Runs in a ThreadedJob worker thread — no GUI or db access here.
-    Returns (success_count, failures) where failures is a list of
-    (title, error message) tuples.
-    """
-    success_count = 0
-    failures = []
-
-    for i, (file_path, metadata) in enumerate(payloads):
-        if abort is not None and abort.is_set():
-            break
-        title = metadata.get('title', os.path.basename(file_path))
-        try:
-            upload_book(file_path, metadata, api_key, server_url)
-            success_count += 1
-        except Exception as e:
-            failures.append((title, str(e)))
-            if log is not None:
-                log.error(f'Failed to upload {title}: {e}')
-        if notifications is not None:
-            notifications.put(((i + 1) / len(payloads), f'Uploaded {i + 1} of {len(payloads)}'))
-
-    return success_count, failures
 
 
 class SkrivistAction(InterfaceAction):
@@ -272,11 +196,13 @@ class SkrivistAction(InterfaceAction):
         if not file_path or not os.path.exists(file_path):
             raise ValueError('Could not locate book file')
 
+        check_size(os.path.getsize(file_path))
+
         # Prepare metadata
         metadata = {
             'title': mi.title or 'Unknown',
             'author': ', '.join(mi.authors) if mi.authors else 'Unknown',
-            'language': mi.language if mi.language else 'en',
+            'language': normalize_language(mi.language, lang_as_iso639_1),
         }
 
         return file_path, metadata

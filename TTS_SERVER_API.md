@@ -39,9 +39,7 @@ Skrivist then discovers voices from your server, and streams audio through it wh
 
 ## Ports and WebSocket
 
-### Recommended: single-port server
-
-Serve everything on **one port**. HTTP REST and WebSocket share the same port — the WebSocket is at path `/ws`. This is the simplest configuration to deploy and put behind a reverse proxy.
+Serve everything on **one port**. HTTP REST and WebSocket share the same host and port — the WebSocket is at path `/ws`. Skrivist always connects to `<server>/ws` on the same host/port you configure; it does **not** derive a second port.
 
 ```
 https://tts.example.com/voices     ← REST
@@ -50,14 +48,9 @@ wss://tts.example.com/ws           ← WebSocket
 
 One reverse-proxy rule with standard WebSocket upgrade headers covers both.
 
-### Legacy: port-pair
+If you already run HTTP and WebSocket on separate ports, put a same-port reverse-proxy adapter in front (Nginx, Caddy, or similar) so `/ws` upgrades to the WebSocket backend while the other paths go to HTTP. Point Skrivist at that single public origin — do not expect the app to add 1 to the port.
 
-If you prefer to run HTTP and WebSocket on separate ports, use consecutive ports — Skrivist auto-derives the WS port as `HTTP port + 1`. In this case the WebSocket lives at the root path `/` of the WS port.
-
-```
-http://localhost:5053    ← HTTP REST
-ws://localhost:5054      ← WebSocket  (5053 + 1, path /)
-```
+The current app synthesizes exclusively over WebSocket, so WebSocket upgrades must work through any proxy. `POST /tts` is not used as a fallback.
 
 ---
 
@@ -127,13 +120,13 @@ Authorization: Bearer <key>
 | `Locale` | string | ✓ | BCP-47 language tag (e.g. `en-US`, `ja-JP`, `fr-FR`). Used for language-matching. |
 | `LocalService` | boolean | — | `true` if the voice runs fully offline on the server host. Informational only. Defaults to `false`. |
 
-You can return as many voices as your engine supports. The user picks one in Settings; Skrivist sends that voice's `ShortName` in every synthesis request.
+You can return as many voices as your engine supports. The user may pick one in Settings; when they do, Skrivist sends that voice's `ShortName`. A synthesis request may omit `voice` and send only `language` — in that case pick your default voice for that language.
 
 ---
 
 ### `POST /tts`
 
-Non-streaming synthesis. Skrivist sends text and receives a complete MP3 file in the response body. Used as a fallback when WebSocket is unavailable.
+Optional standalone/testing endpoint for non-streaming synthesis (text in, a complete audio file out). **The current Skrivist app does not call this endpoint** and does not fall back to it when WebSocket fails. Keep it if you want curl/CI checks; production reading always uses `/ws`.
 
 **Request headers:**
 ```
@@ -145,18 +138,22 @@ Authorization: Bearer <key>    (when auth enabled)
 ```json
 {
   "text": "The quick brown fox jumped over the lazy dog.",
-  "voice": "my-voice-en",
+  "language": "en",
   "rate": "+0%",
   "pitch": "+0Hz"
 }
 ```
 
+`voice` may be omitted. When only `language` is present, pick the default voice for that language. When both are present, `voice` wins. Tolerate extra optional fields such as `shareable`.
+
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `text` | string | ✓ | — | UTF-8 text to synthesize. May contain punctuation and whitespace. |
-| `voice` | string | — | your default | `ShortName` of the voice to use. |
+| `voice` | string | — | default for `language` | `ShortName` of the voice to use. Omit to let the server choose. |
+| `language` | string | — | — | Content language (BCP-47 or ISO 639-1, e.g. `en`, `ja`). Used to pick a default voice when `voice` is absent. |
 | `rate` | string | — | `"+0%"` | Speech rate (see [Rate & Pitch](#rate--pitch-format)). |
 | `pitch` | string | — | `"+0Hz"` | Pitch (see [Rate & Pitch](#rate--pitch-format)). |
+| `shareable` | boolean | — | — | Optional extra field from the app; ignore if unused. |
 
 **Response `200 OK`:**
 ```
@@ -173,7 +170,7 @@ Body: <complete MP3 file>
 
 ### `GET /ws` — WebSocket streaming
 
-The primary audio delivery method. Skrivist connects once per reading session and sends multiple synthesis requests over the same connection.
+The only audio delivery method the current app uses. Skrivist opens **one WebSocket per synthesis request** (typically one sentence or passage), streams binary chunks, reads `{"type":"complete"}`, then closes the connection. It does **not** keep one socket open for a whole reading session.
 
 **Connecting (with auth):**
 ```
@@ -192,74 +189,72 @@ Send a **text frame** containing a JSON synthesis request:
 ```json
 {
   "text": "In the beginning God created the heavens and the earth.",
-  "voice": "my-voice-en",
+  "language": "en",
   "rate": "+0%",
   "pitch": "+0Hz"
 }
 ```
 
-Same fields as `POST /tts`.
+Same fields as `POST /tts`: `voice` may be omitted; `language` is included when known; extra optional fields such as `shareable` must be tolerated. When only `language` is present, pick the default voice for that language; when both `voice` and `language` are present, `voice` wins.
 
 #### Server → Client
 
-Stream the synthesized audio back as **binary frames** (raw MP3 data), followed by a **text frame** (JSON) signalling completion or error.
+Stream the synthesized audio back as **binary frames**, followed by a **text frame** (JSON) signalling completion or error. The client accumulates binary frames until `complete`, then decodes the buffer.
 
 **Binary frame — audio chunk:**
 ```
-<raw MP3 bytes>
+<raw audio bytes>
 ```
 
 Send chunks as soon as they are produced by your synthesis engine. Do not buffer the entire result before sending — streaming is the point.
 
 **Text frame — done:**
 ```json
-{ "type": "complete" }
+{ "type": "complete", "contentType": "audio/mpeg" }
 ```
+
+`contentType` is optional but recommended (`audio/mpeg`, `audio/ogg`, or `audio/wav`). MP3 is the preferred format. Ogg and WAV are accepted when `complete` carries the matching `contentType` (the client also sniffs the first bytes if the field is missing).
 
 **Text frame — error:**
 ```json
 { "type": "error", "message": "Synthesis failed: voice not found" }
 ```
 
-#### Message flow for one sentence
+#### Message flow for one synthesis request
 
 ```
 Client                               Server
   │                                    │
   │── WebSocket connect ───────────────▶│
   │                                    │
-  │── { text, voice, rate, pitch } ───▶│  (synthesis request)
+  │── { text, language, rate, pitch } ─▶│  (one request; voice optional)
   │                                    │
-  │◀── <binary MP3 chunk> ─────────────│
-  │◀── <binary MP3 chunk> ─────────────│
-  │◀── <binary MP3 chunk> ─────────────│
-  │◀── { "type": "complete" } ─────────│
+  │◀── <binary audio chunk> ───────────│
+  │◀── <binary audio chunk> ───────────│
+  │◀── <binary audio chunk> ───────────│
+  │◀── { "type": "complete", ... } ────│
   │                                    │
-  │── { text, voice, rate, pitch } ───▶│  (next sentence, same connection)
-  │◀── <binary MP3 chunk> ─────────────│
-  │◀── { "type": "complete" } ─────────│
-  │                                    │
-  │── close ───────────────────────────▶│
+  │── close ───────────────────────────▶│  (client closes after complete)
 ```
 
-The connection is held open for the duration of a reading session. Your server must handle multiple sequential requests per connection without dropping or mixing up responses.
+The next sentence is a **new** WebSocket connection. Your server may still accept multiple sequential requests on one connection (useful for testing), but the app will not reuse the socket.
 
 ---
 
 ## Audio Format
 
-All audio — whether from `POST /tts` or the WebSocket — must be **MP3**:
+**MP3 is recommended.** The WebSocket client also accepts Ogg and WAV when the `complete` message includes `contentType` (or when the first bytes sniff as those formats).
 
 | Property | Requirement |
 |----------|-------------|
-| Container | MPEG Audio (`.mp3`) |
+| Container | MP3 (`audio/mpeg`) recommended; Ogg (`audio/ogg`) and WAV (`audio/wav`) accepted |
 | Channels | Mono or stereo |
 | Sample rate | Any standard rate (22 050, 24 000, 44 100 Hz, etc.) |
-| Bit rate | 64–192 kbps recommended |
+| Bit rate | 64–192 kbps recommended for MP3 |
 
-Skrivist decodes audio using the Web Audio API's `decodeAudioData`, which supports MP3 natively in all modern browsers. WAV is **not** expected.
+Skrivist decodes audio using the Web Audio API's `decodeAudioData`.
 
-For WebSocket streaming: you do not need to send a complete file. The client accumulates binary frames and decodes the MP3 stream after receiving `{ "type": "complete" }`. You can safely split at any byte boundary.
+For WebSocket streaming: you do not need to send a complete file. The client accumulates binary frames until `{ "type": "complete" }` and then decodes the buffer. You can safely split at any byte boundary.
 
 ---
 
@@ -416,8 +411,12 @@ from aiohttp import web, WSMsgType
 API_KEY = "changeme"   # set to None to disable auth
 
 # ── Your synthesis engine goes here ──────────────────────────────────────────
-async def synthesize(text: str, voice: str, rate: str, pitch: str) -> bytes:
-    """Return MP3 audio bytes for the given text."""
+async def synthesize(text: str, voice: str, rate: str, pitch: str,
+                     language: str = "") -> bytes:
+    """Return MP3 audio bytes for the given text.
+
+    `voice` may be empty; if so, pick a default for `language`.
+    """
     raise NotImplementedError("Plug in your TTS engine here")
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -427,14 +426,33 @@ async def handle_health(req):
 async def handle_voices(req):
     voices = [
         {"ShortName": "my-voice-en", "DisplayName": "My Voice (English)",
-         "Locale": "en-US", "LocalService": False}
+         "Locale": "en-US", "LocalService": False},
+        {"ShortName": "my-voice-ja", "DisplayName": "My Voice (Japanese)",
+         "Locale": "ja-JP", "LocalService": False},
     ]
     return web.json_response(voices)
 
+DEFAULT_VOICES = {"en": "my-voice-en", "ja": "my-voice-ja"}
+
+def pick_voice(data):
+    # voice wins when both are present; language-only → default for that language
+    voice = data.get("voice")
+    if voice:
+        return voice
+    lang = (data.get("language") or "").lower()
+    primary = lang.split("-")[0]
+    return DEFAULT_VOICES.get(primary)
+
 async def handle_tts(req):
     data = await req.json()
-    audio = await synthesize(data["text"], data.get("voice", "my-voice-en"),
-                              data.get("rate", "+0%"), data.get("pitch", "+0Hz"))
+    voice = pick_voice(data)
+    if not voice:
+        return web.json_response({"error": "unsupported language"}, status=400)
+    audio = await synthesize(
+        data["text"], voice,
+        data.get("rate", "+0%"), data.get("pitch", "+0Hz"),
+        data.get("language") or "",
+    )
     return web.Response(body=audio, content_type="audio/mpeg")
 
 async def handle_ws(req):
@@ -447,10 +465,23 @@ async def handle_ws(req):
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
             data = json.loads(msg.data)
-            audio = await synthesize(data["text"], data.get("voice", "my-voice-en"),
-                                      data.get("rate", "+0%"), data.get("pitch", "+0Hz"))
+            voice = pick_voice(data)
+            if not voice:
+                await ws.send_str(json.dumps({
+                    "type": "error",
+                    "message": "unsupported language",
+                }))
+                continue
+            audio = await synthesize(
+                data["text"], voice,
+                data.get("rate", "+0%"), data.get("pitch", "+0Hz"),
+                data.get("language") or "",
+            )
             await ws.send_bytes(audio)
-            await ws.send_str(json.dumps({"type": "complete"}))
+            await ws.send_str(json.dumps({
+                "type": "complete",
+                "contentType": "audio/mpeg",
+            }))
     return ws
 
 @web.middleware
@@ -470,7 +501,10 @@ async def cors(req, handler):
     })
     return resp
 
-app = web.Application(middlewares=[auth, cors])
+# CORS must wrap auth (listed first = outermost) so a 401 from auth still
+# includes Access-Control-Allow-* headers. Browsers discard opaque 401s
+# that lack CORS, which makes the failure look like a network error.
+app = web.Application(middlewares=[cors, auth])
 app.router.add_get("/health", handle_health)
 app.router.add_get("/voices",  handle_voices)
 app.router.add_post("/tts",    handle_tts)
@@ -494,8 +528,9 @@ Before pointing Skrivist at your server, verify:
 - [ ] `GET /health` returns `200` without auth
 - [ ] `GET /voices` returns a JSON array with at least one voice
 - [ ] Each voice has `ShortName`, `DisplayName`, and `Locale`
-- [ ] `POST /tts` returns `Content-Type: audio/mpeg` binary
-- [ ] WebSocket at `/ws` streams binary MP3 chunks then `{ "type": "complete" }`
+- [ ] `POST /tts` (optional testing endpoint) returns `Content-Type: audio/mpeg` binary
+- [ ] WebSocket at `/ws` streams binary chunks then `{ "type": "complete" }` (optionally with `contentType`); the app opens one connection per request and closes after complete
+- [ ] Synthesis requests may omit `voice` and include `language`; extra fields such as `shareable` are ignored safely
 - [ ] CORS headers are present on all responses
 - [ ] `OPTIONS` preflight requests return `200`
 - [ ] If using auth: `/health` is exempt, HTTP uses `Authorization: Bearer`, WS uses `?token=`
