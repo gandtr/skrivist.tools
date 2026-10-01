@@ -1,5 +1,5 @@
 # Skrivist tools
 
-This repository contains skrivist ebook reader related tools for end users.
+Tools for [Skrivist](https://skriv.ist) users.
 
-You can download the calibre plugin from releases. Check the readme [here](/calibre-plugin/README.md)
+- **Calibre plugin**: sends EPUB books from Calibre to a Skrivist Cloud library (app.skriv.ist). Download it from [Releases](https://github.com/gandtr/skrivist.tools/releases/latest); setup and troubleshooting are in its [README](/calibre-plugin/README.md).

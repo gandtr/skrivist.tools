@@ -1,6 +1,8 @@
 # Skrivist Calibre Plugin
 
-Send books from Calibre directly to your [Skriv.ist](https://skriv.ist) cloud library with one click.
+Send books from Calibre directly to your [Skrivist Cloud](https://skriv.ist) library at app.skriv.ist with one click.
+
+The free Skrivist readers ([Books](https://books.skriv.ist) and [Comics](https://comics.skriv.ist)) keep everything on your device and have no cloud library, so the plugin can't send books to them.
 
 ## Installation
 
@@ -45,7 +47,7 @@ The toolbar button **Send to Skrivist** will now appear. You can also add it man
 1. Select one or more books in your Calibre library
 2. Click **Send to Skrivist** in the toolbar (or press `Ctrl+Shift+K`)
 3. Confirm if uploading multiple books
-4. Books appear in your Skriv.ist library within seconds
+4. Books appear in your Skrivist Cloud library within seconds
 
 > **Note:** Only EPUB format is supported. Use Calibre's built-in **Convert books** feature to convert other formats to EPUB first.
 
@@ -56,8 +58,8 @@ The toolbar button **Send to Skrivist** will now appear. You can also add it man
 - Calibre 5.0 or newer
 - Books must be in EPUB format
 - EPUB files must be 50 MB or smaller (the server upload limit)
-- A [Skriv.ist](https://skriv.ist) account
-- An API key (generated in Skriv.ist settings)
+- A Skrivist Cloud account at [app.skriv.ist](https://app.skriv.ist) (Cloud is Skrivist's paid plan; see [skriv.ist](https://skriv.ist))
+- An API key (generated in the app's Settings)
 
 ---
 
@@ -70,10 +72,13 @@ The toolbar button **Send to Skrivist** will now appear. You can also add it man
 → Select the book in Calibre, click **Convert books**, set output format to EPUB, then try again.
 
 **Upload fails / network error**
-→ Check your internet connection. If the problem persists, verify your API key is still active in Skriv.ist settings.
+→ Check your internet connection. If the problem persists, verify your API key is still active in the app's Settings.
+
+**"not attempted — check your API key and Skrivist Cloud subscription"**
+→ The server refused the key, so the plugin stopped the batch. Generate a new key in the app's Settings, or check that your Skrivist Cloud subscription is active.
 
 **Book doesn't appear in library**
-→ Refresh the Skriv.ist page. If the book still doesn't appear after 30 seconds, check that your cloud book quota hasn't been reached (free plan: 10 books).
+→ Refresh app.skriv.ist. If the book still doesn't appear after 30 seconds, check the plugin's upload report: books that didn't fit in a full cloud library are listed as failed with a "Cloud library full" message.
 
 **"Send to Skrivist" button not in toolbar**
 → Go to **Preferences** > **Toolbars & menus** > **The main toolbar**, find **Skrivist** in the left panel and add it.
