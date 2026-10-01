@@ -15,7 +15,7 @@ class SkrivistPlugin(InterfaceActionBase):
     description = 'Send books to your Skriv.ist cloud library'
     supported_platforms = ['windows', 'osx', 'linux']
     author = 'Skrivist'
-    version = (1, 0, 6)
+    version = (1, 0, 7)
     minimum_calibre_version = (5, 0, 0)
 
     # The actual plugin UI is implemented in ui.py
