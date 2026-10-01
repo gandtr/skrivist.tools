@@ -114,6 +114,18 @@ def upload_book(file_path, metadata, api_key, server_url, *, urlopen=urllib.requ
         )
 
 
+AUTH_NOT_ATTEMPTED = (
+    'not attempted — check your API key and Skrivist Cloud subscription'
+)
+
+
+def _skip_rest(payloads, start, message, failures):
+    for rest_path, rest_meta in payloads[start:]:
+        failures.append(
+            (rest_meta.get('title', os.path.basename(rest_path)), message)
+        )
+
+
 def _aborted(abort):
     return abort is not None and abort.is_set()
 
@@ -180,12 +192,7 @@ def upload_books(
                         failures.append((title, str(e2)))
                         if log is not None:
                             log.error('Failed to upload {}: {}'.format(title, e2))
-                        for j in range(i + 1, total):
-                            rest_path, rest_meta = payloads[j]
-                            rest_title = rest_meta.get(
-                                'title', os.path.basename(rest_path)
-                            )
-                            failures.append((rest_title, msg))
+                        _skip_rest(payloads, i + 1, msg, failures)
                         report(1, msg)
                         break
                     else:
@@ -200,6 +207,12 @@ def upload_books(
                 failures.append((title, str(e)))
                 if log is not None:
                     log.error('Failed to upload {}: {}'.format(title, e))
+                if e.status_code in (401, 403):
+                    # A bad key or a lapsed subscription fails every book
+                    # the same way; don't stream the rest of the batch.
+                    _skip_rest(payloads, i + 1, AUTH_NOT_ATTEMPTED, failures)
+                    report(1, AUTH_NOT_ATTEMPTED)
+                    break
         except Exception as e:
             failures.append((title, str(e)))
             if log is not None:

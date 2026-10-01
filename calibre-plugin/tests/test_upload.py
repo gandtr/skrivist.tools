@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from retry import remaining_not_attempted_message  # noqa: E402
 from upload import (  # noqa: E402
+    AUTH_NOT_ATTEMPTED,
     UPLOAD_SIZE_LIMIT,
     check_size,
     normalize_language,
@@ -214,6 +215,25 @@ class TestUploadBooks(UploadTestCase):
         self.assertEqual(failures, [])
         self.assertEqual(slept, [1, 1])
         self.assertEqual(len(urlopen.requests), 2)
+
+    def test_auth_failure_stops_batch(self):
+        a = self._book('a.epub', 'A')
+        b = self._book('b.epub', 'B')
+        c = self._book('c.epub', 'C')
+        urlopen = ScriptedUrlOpen(
+            [http_error(403, '{"error":"Subscription required","code":"NOT_SUBSCRIBED"}')]
+        )
+        success, failures = self._run_books([a, b, c], urlopen)
+        self.assertEqual(success, 0)
+        self.assertEqual(
+            failures,
+            [
+                ('A', 'Subscription required'),
+                ('B', AUTH_NOT_ATTEMPTED),
+                ('C', AUTH_NOT_ATTEMPTED),
+            ],
+        )
+        self.assertEqual(len(urlopen.requests), 1)
 
     def test_second_rate_limit_stops_batch(self):
         a = self._book('a.epub', 'A')
