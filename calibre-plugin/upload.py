@@ -199,6 +199,10 @@ def upload_books(
                         failures.append((title, str(e2)))
                         if log is not None:
                             log.error('Failed to upload {}: {}'.format(title, e2))
+                        if e2.status_code in (401, 403):
+                            _skip_rest(payloads, i + 1, AUTH_NOT_ATTEMPTED, failures)
+                            report(1, AUTH_NOT_ATTEMPTED)
+                            break
                 except Exception as e2:
                     failures.append((title, str(e2)))
                     if log is not None:

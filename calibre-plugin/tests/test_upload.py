@@ -235,6 +235,23 @@ class TestUploadBooks(UploadTestCase):
         )
         self.assertEqual(len(urlopen.requests), 1)
 
+    def test_auth_failure_on_rate_limit_retry_stops_batch(self):
+        a = self._book('a.epub', 'A')
+        b = self._book('b.epub', 'B')
+        urlopen = ScriptedUrlOpen(
+            [
+                http_error(429, '{"error":"Too many requests"}', {'Retry-After': '1'}),
+                http_error(401, '{"error":"Invalid API key"}'),
+            ]
+        )
+        success, failures = self._run_books([a, b], urlopen, sleep=lambda _s: None)
+        self.assertEqual(success, 0)
+        self.assertEqual(
+            failures,
+            [('A', 'Invalid API key'), ('B', AUTH_NOT_ATTEMPTED)],
+        )
+        self.assertEqual(len(urlopen.requests), 2)
+
     def test_second_rate_limit_stops_batch(self):
         a = self._book('a.epub', 'A')
         b = self._book('b.epub', 'B')
