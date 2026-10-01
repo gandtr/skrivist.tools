@@ -8,7 +8,9 @@ from qt.core import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushB
 
 from calibre.utils.config import JSONConfig
 
-# Use same prefs as ui.py
+# The one prefs object for the plugin. JSONConfig reads its file once, so
+# ui.py imports this instance instead of opening its own (a second copy
+# would keep the old API key until Calibre restarts).
 prefs = JSONConfig('plugins/skrivist')
 prefs.defaults['api_key'] = ''
 prefs.defaults['server_url'] = 'https://api.skriv.ist'

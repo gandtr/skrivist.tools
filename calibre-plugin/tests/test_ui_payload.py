@@ -57,12 +57,16 @@ def _install_stubs():
     _module('calibre.utils.config', JSONConfig=_JSONConfig)
     _module('calibre.utils.localization',
             lang_as_iso639_1=lambda code: {'eng': 'en', 'jpn': 'ja', 'tur': 'tr'}.get(code))
-    _module('qt.core', QMenu=object, QTimer=object, QToolButton=_QToolButton)
+    _module('qt.core', QMenu=object, QTimer=object, QToolButton=_QToolButton,
+            QWidget=object, QVBoxLayout=object, QHBoxLayout=object, QLabel=object,
+            QLineEdit=object, QPushButton=object, QGroupBox=object)
     _module('qt')
     _module('calibre_plugins')
     _module('calibre_plugins.skrivist')
     sys.modules['calibre_plugins.skrivist.upload'] = upload
     sys.modules['calibre_plugins.skrivist.retry'] = retry
+    import config
+    sys.modules['calibre_plugins.skrivist.config'] = config
 
 
 _install_stubs()
@@ -132,6 +136,13 @@ class TestBookPayload(unittest.TestCase):
     def test_non_epub_format_is_rejected(self):
         with self.assertRaises(ValueError):
             self._payload(formats=('MOBI',))
+
+
+class TestPrefs(unittest.TestCase):
+    def test_ui_reads_the_prefs_the_settings_widget_writes(self):
+        # JSONConfig never re-reads its file, so a second instance in ui.py
+        # would keep a stale API key until Calibre restarts.
+        self.assertIs(ui.prefs, sys.modules['calibre_plugins.skrivist.config'].prefs)
 
 
 if __name__ == '__main__':

@@ -15,11 +15,11 @@ from functools import partial
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2 import error_dialog, info_dialog, question_dialog
 from calibre.gui2.threaded_jobs import ThreadedJob
-from calibre.utils.config import JSONConfig
 from calibre.utils.localization import lang_as_iso639_1
 
 from qt.core import QMenu, QTimer, QToolButton
 
+from calibre_plugins.skrivist.config import prefs
 from calibre_plugins.skrivist.upload import (
     check_size,
     normalize_language,
@@ -28,12 +28,6 @@ from calibre_plugins.skrivist.upload import (
 
 GITHUB_RELEASES_URL = 'https://api.github.com/repos/gandtr/skrivist.tools/releases/latest'
 RELEASES_PAGE = 'https://github.com/gandtr/skrivist.tools/releases/latest'
-
-# Plugin configuration stored in calibre config directory
-prefs = JSONConfig('plugins/skrivist')
-prefs.defaults['api_key'] = ''
-prefs.defaults['server_url'] = 'https://api.skriv.ist'
-
 
 class SkrivistAction(InterfaceAction):
     """
