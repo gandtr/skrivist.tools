@@ -1,5 +1,15 @@
 # Skrivist Calibre Plugin
 
+> **Retired in October 2026.** Skrivist Cloud (app.skriv.ist and its API at
+> api.skriv.ist) is shut down, so the Calibre plugin has nowhere to send books
+> and every upload fails. There won't be another release, and this repository
+> will be archived. Remove the plugin from Calibre under Preferences → Plugins.
+> The free Skrivist readers, [Books](https://books.skriv.ist) and
+> [Comics](https://comics.skriv.ist), open files from your device and don't
+> need it.
+
+The rest of this page describes the plugin as it was.
+
 Send books from Calibre directly to your [Skrivist Cloud](https://skriv.ist) library at app.skriv.ist with one click.
 
 The free Skrivist readers ([Books](https://books.skriv.ist) and [Comics](https://comics.skriv.ist)) keep everything on your device and have no cloud library, so the plugin can't send books to them.
